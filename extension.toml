@@ -1,0 +1,13 @@
+[extension]
+id = "php-lsp"
+name = "PHP LSP"
+description = "PHP 8.5+ Language Server with Laravel/Symfony container intelligence"
+version = "0.1.0"
+schema_version = 1
+
+[[languages]]
+name = "PHP"
+language_servers = ["php-lsp"]
+
+[language_servers.php-lsp]
+languages = ["PHP"]
