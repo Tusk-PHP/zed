@@ -1,5 +1,5 @@
 [package]
-name = "php-lsp-zed"
+name = "tusk-php-zed"
 version = "0.1.0"
 edition = "2021"
 [lib]

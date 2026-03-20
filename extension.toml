@@ -1,7 +1,7 @@
 [extension]
-id = "php-lsp"
-name = "PHP LSP"
-description = "PHP 8.5+ Language Server with Laravel/Symfony container intelligence"
+id = "tusk-php"
+name = "Tusk PHP"
+description = "High-performance PHP 8.5+ language server with Laravel & Symfony container-aware intelligence"
 version = "0.1.0"
 schema_version = 1
 
