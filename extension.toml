@@ -1,13 +1,28 @@
-[extension]
 id = "tusk-php"
 name = "Tusk PHP"
-description = "High-performance PHP 8.5+ language server with Laravel & Symfony container-aware intelligence"
 version = "0.1.0"
 schema_version = 1
+description = "High-performance PHP 8.5+ language server with Laravel & Symfony container-aware intelligence"
+repository = "https://github.com/open-southeners/php-lsp"
+authors = ["Open Southeners"]
+themes = []
+icon_themes = []
+languages = []
+capabilities = []
 
-[[languages]]
-name = "PHP"
-language_servers = ["php-lsp"]
+[lib]
+kind = "Rust"
+version = "0.7.0"
 
-[language_servers.php-lsp]
-languages = ["PHP"]
+[language_servers.tusk-php]
+language = "PHP"
+languages = []
+
+[language_servers.tusk-php.language_ids]
+PHP = "php"
+
+[context_servers]
+
+[agent_servers]
+
+[slash_commands]
