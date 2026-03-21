@@ -26,3 +26,11 @@ PHP = "php"
 [agent_servers]
 
 [slash_commands]
+
+[slash_commands.tusk-copy-namespace]
+description = "Show the declared namespace or FQN for a PHP file"
+requires_argument = true
+
+[slash_commands.tusk-namespace-for-path]
+description = "Show the expected namespace for a PHP file path using composer.json PSR-4"
+requires_argument = true
