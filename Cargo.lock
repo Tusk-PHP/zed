@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "tusk-php-zed"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "zed_extension_api",
 ]
@@ -325,7 +325,7 @@ dependencies = [
 
 [[package]]
 name = "zed_extension_api"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "594fd10dd0f2f853eb243e2425e7c95938cef49adb81d9602921d002c5e6d9d9"
 dependencies = [

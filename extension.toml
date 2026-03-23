@@ -1,6 +1,6 @@
 id = "tusk-php"
 name = "Tusk PHP"
-version = "0.1.0"
+version = "0.2.0"
 schema_version = 1
 description = "High-performance PHP 8.5+ language server with Laravel & Symfony container-aware intelligence"
 repository = "https://github.com/open-southeners/php-lsp"
