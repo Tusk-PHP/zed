@@ -50,13 +50,13 @@ impl PhpLspExtension {
             _ => return Err("Unsupported arch".into()),
         };
         let ext = if platform == zed::Os::Windows { ".exe" } else { "" };
-        let binary_path = format!("php-lsp-{EXTENSION_VERSION}/php-lsp{ext}");
+        let binary_path = format!("tusk-php-{EXTENSION_VERSION}/php-lsp{ext}");
 
         if !fs::metadata(&binary_path).map_or(false, |metadata| metadata.is_file()) {
             let url = format!(
-                "https://github.com/open-southeners/php-lsp/releases/download/v{EXTENSION_VERSION}/php-lsp-{platform_name}-{arch_name}{ext}"
+                "https://github.com/open-southeners/php-lsp/releases/download/v{EXTENSION_VERSION}/tusk-php-{platform_name}-{arch_name}{ext}"
             );
-            let _ = fs::create_dir_all(format!("php-lsp-{EXTENSION_VERSION}"));
+            let _ = fs::create_dir_all(format!("tusk-php-{EXTENSION_VERSION}"));
             zed::download_file(&url, &binary_path, zed::DownloadedFileType::Uncompressed)?;
             zed::make_file_executable(&binary_path)?;
         }
