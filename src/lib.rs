@@ -33,7 +33,7 @@ impl PhpLspExtension {
                 return Ok(path.clone());
             }
         }
-        if let Some(path) = worktree.which("php-lsp") {
+        if let Some(path) = worktree.which("tusk-php") {
             self.cached_binary_path = Some(path.clone());
             return Ok(path);
         }
@@ -50,7 +50,7 @@ impl PhpLspExtension {
             _ => return Err("Unsupported arch".into()),
         };
         let ext = if platform == zed::Os::Windows { ".exe" } else { "" };
-        let binary_path = format!("tusk-php-{EXTENSION_VERSION}/php-lsp{ext}");
+        let binary_path = format!("tusk-php-{EXTENSION_VERSION}/tusk-php{ext}");
 
         if !fs::metadata(&binary_path).map_or(false, |metadata| metadata.is_file()) {
             let url = format!(
