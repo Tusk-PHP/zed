@@ -16,10 +16,11 @@ version = "0.7.0"
 
 [language_servers.tusk-php]
 language = "PHP"
-languages = []
+languages = ["JSON"]
 
 [language_servers.tusk-php.language_ids]
 PHP = "php"
+JSON = "json"
 
 [context_servers]
 
