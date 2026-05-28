@@ -54,7 +54,7 @@ impl PhpLspExtension {
 
         if !fs::metadata(&binary_path).map_or(false, |metadata| metadata.is_file()) {
             let url = format!(
-                "https://github.com/open-southeners/tusk-php/releases/download/{EXTENSION_VERSION}/tusk-php-{platform_name}-{arch_name}{ext}"
+                "https://github.com/Tusk-PHP/lsp/releases/download/{EXTENSION_VERSION}/tusk-php-{platform_name}-{arch_name}{ext}"
             );
             let _ = fs::create_dir_all(format!("tusk-php-{EXTENSION_VERSION}"));
             zed::download_file(&url, &binary_path, zed::DownloadedFileType::Uncompressed)?;
