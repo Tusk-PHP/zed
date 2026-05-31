@@ -1,0 +1,21 @@
+# Pins the Tusk PHP LSP binary version this Zed extension is built and tested
+# against. The extension's download code must verify the downloaded binary's
+# SHA-256 against the matching entry below before installing it. Bump this
+# deliberately after compatibility testing — patch releases of the LSP do not
+# force an extension republish.
+#
+# Fill the sha256 values from the LSP release checksums attached to:
+#   https://github.com/Tusk-PHP/lsp/releases/tag/<version>
+# (LSP tags have no leading "v", e.g. 0.8.0)
+
+[lsp]
+version = "0.8.0"
+
+# Release assets are named `tusk-php-<os>-<arch>` (with a `.exe` suffix on
+# Windows), matching the release pipeline in Tusk-PHP/lsp.
+[lsp.sha256]
+darwin-arm64  = "TODO"
+darwin-amd64  = "TODO"
+linux-amd64   = "TODO"
+linux-arm64   = "TODO"
+windows-amd64 = "TODO"
