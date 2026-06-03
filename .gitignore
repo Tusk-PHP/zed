@@ -1,0 +1,5 @@
+# Rust build output
+/target
+
+# Compiled Zed extension artifact (built from source by the extension registry / CI)
+/extension.wasm

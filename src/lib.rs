@@ -1,3 +1,4 @@
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::{Component, Path, PathBuf},
@@ -8,8 +9,85 @@ use zed_extension_api::{
     LanguageServerId, Result, SlashCommand, SlashCommandOutput, SlashCommandOutputSection, Worktree,
 };
 
-const EXTENSION_VERSION: &str = env!("CARGO_PKG_VERSION");
 const LANGUAGE_SERVER_ID: &str = "tusk-php";
+const PIN_TOML: &str = include_str!("../tusk-lsp.toml");
+
+// ---------------------------------------------------------------------------
+// tusk-lsp.toml pin-file parser (no toml crate — hand-rolled)
+// ---------------------------------------------------------------------------
+
+/// Returns the `version` value from the `[lsp]` section of PIN_TOML.
+fn pinned_version() -> &'static str {
+    let mut in_lsp_section = false;
+    for raw in PIN_TOML.lines() {
+        let line = raw.trim();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') {
+            // "[lsp]" exactly — not "[lsp.sha256]"
+            in_lsp_section = line == "[lsp]";
+            continue;
+        }
+        if in_lsp_section {
+            if let Some(rest) = line.strip_prefix("version") {
+                let rest = rest.trim();
+                if let Some(rest) = rest.strip_prefix('=') {
+                    let value = rest.trim().trim_matches('"');
+                    return value;
+                }
+            }
+        }
+    }
+    // Fallback: should never happen if tusk-lsp.toml is well-formed.
+    "0.0.0"
+}
+
+/// Returns the lowercase hex SHA-256 (WITHOUT `sha256:` prefix) for the given
+/// `platform-arch` key (e.g. `"darwin-arm64"`), or `None` if not present.
+fn pinned_sha(platform_arch: &str) -> Option<String> {
+    let mut in_sha_section = false;
+    for raw in PIN_TOML.lines() {
+        let line = raw.trim();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        if line.starts_with('[') {
+            in_sha_section = line == "[lsp.sha256]";
+            continue;
+        }
+        if in_sha_section {
+            // lines look like: darwin-arm64  = "sha256:aa2260ff..."
+            let Some(eq_pos) = line.find('=') else {
+                continue;
+            };
+            let key = line[..eq_pos].trim();
+            if key == platform_arch {
+                let value = line[eq_pos + 1..].trim().trim_matches('"');
+                let hex = value
+                    .strip_prefix("sha256:")
+                    .unwrap_or(value)
+                    .trim()
+                    .to_lowercase();
+                return Some(hex);
+            }
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// SHA-256 helper
+// ---------------------------------------------------------------------------
+
+fn sha256_hex(data: &[u8]) -> String {
+    let digest = Sha256::digest(data);
+    digest.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+// ---------------------------------------------------------------------------
+// Extension struct
+// ---------------------------------------------------------------------------
 
 struct PhpLspExtension {
     cached_binary_path: Option<String>,
@@ -23,21 +101,57 @@ impl PhpLspExtension {
         }
     }
 
+    /// Core resolution logic.
+    ///
+    /// Precedence:
+    ///   1. Cached path (still exists on disk as a file)
+    ///   2. `worktree.which("tusk-php")` — remote/local PATH
+    ///   3. Configured `binary.path` — resolved relative to worktree root when
+    ///      not absolute; validated with `fs::metadata`; skipped if missing.
+    ///   4. Download the pinned release, verify SHA-256, exec.
+    ///   5. Actionable error.
     fn language_server_binary_path(
         &mut self,
         _id: &LanguageServerId,
         worktree: &Worktree,
+        configured_path: Option<String>,
     ) -> Result<String> {
+        // 1. Cached path.
         if let Some(path) = &self.cached_binary_path {
-            if fs::metadata(path).map_or(false, |metadata| metadata.is_file()) {
+            if fs::metadata(path).map_or(false, |m| m.is_file()) {
                 return Ok(path.clone());
             }
         }
+
+        // 2. Remote/local PATH lookup — wins over any configured path so that
+        //    a client-local absolute path is NOT forwarded to an SSH remote.
         if let Some(path) = worktree.which("tusk-php") {
             self.cached_binary_path = Some(path.clone());
             return Ok(path);
         }
 
+        // 3. Configured binary.path — validate existence before trusting it.
+        let configured_path_missing = if let Some(raw) = configured_path {
+            let resolved: PathBuf = {
+                let p = PathBuf::from(&raw);
+                if p.is_absolute() {
+                    p
+                } else {
+                    PathBuf::from(worktree.root_path()).join(p)
+                }
+            };
+            if fs::metadata(&resolved).map_or(false, |m| m.is_file()) {
+                let s = resolved.to_string_lossy().into_owned();
+                self.cached_binary_path = Some(s.clone());
+                return Ok(s);
+            }
+            // Configured but not found on this host — fall through, remember the fact.
+            true
+        } else {
+            false
+        };
+
+        // 4. Download pinned release.
         let (platform, arch) = zed::current_platform();
         let platform_name = match platform {
             zed::Os::Mac => "darwin",
@@ -50,17 +164,71 @@ impl PhpLspExtension {
             _ => return Err("Unsupported arch".into()),
         };
         let ext = if platform == zed::Os::Windows { ".exe" } else { "" };
-        let binary_path = format!("tusk-php-{EXTENSION_VERSION}/tusk-php{ext}");
 
-        if !fs::metadata(&binary_path).map_or(false, |metadata| metadata.is_file()) {
-            let url = format!(
-                "https://github.com/Tusk-PHP/lsp/releases/download/{EXTENSION_VERSION}/tusk-php-{platform_name}-{arch_name}{ext}"
-            );
-            let _ = fs::create_dir_all(format!("tusk-php-{EXTENSION_VERSION}"));
-            zed::download_file(&url, &binary_path, zed::DownloadedFileType::Uncompressed)?;
-            zed::make_file_executable(&binary_path)?;
+        let version = pinned_version();
+        let platform_arch = format!("{platform_name}-{arch_name}");
+
+        let expected_sha = pinned_sha(&platform_arch).ok_or_else(|| {
+            format!("no pinned checksum for {platform_arch} in tusk-lsp.toml")
+        })?;
+
+        let binary_path = format!("tusk-php-{version}/tusk-php{ext}");
+        let url = format!(
+            "https://github.com/Tusk-PHP/lsp/releases/download/{version}/tusk-php-{platform_name}-{arch_name}{ext}"
+        );
+
+        // Download if the file is not on disk yet.
+        if !fs::metadata(&binary_path).map_or(false, |m| m.is_file()) {
+            let _ = fs::create_dir_all(format!("tusk-php-{version}"));
+            zed::download_file(&url, &binary_path, zed::DownloadedFileType::Uncompressed)
+                .map_err(|e| {
+                    if configured_path_missing {
+                        format!(
+                            "tusk-php language server not found: not on PATH, configured \
+                             binary.path does not exist on the target host, and the release \
+                             download failed ({e}). Install tusk-php on the remote PATH or \
+                             unset/correct lsp.tusk-php.binary.path."
+                        )
+                    } else {
+                        format!(
+                            "tusk-php language server not found: not on PATH and the release \
+                             download failed ({e}). Install tusk-php manually or ensure network \
+                             access to GitHub releases."
+                        )
+                    }
+                })?;
         }
 
+        // Verify SHA-256 (always — even for a pre-existing cached file).
+        // If pre-existing file mismatches, re-download once and re-verify.
+        let actual_sha = {
+            let bytes = fs::read(&binary_path)
+                .map_err(|e| format!("failed to read {binary_path}: {e}"))?;
+            sha256_hex(&bytes)
+        };
+
+        if !actual_sha.eq_ignore_ascii_case(&expected_sha) {
+            // Remove the bad file and try one fresh download.
+            let _ = fs::remove_file(&binary_path);
+            let _ = fs::create_dir_all(format!("tusk-php-{version}"));
+            zed::download_file(&url, &binary_path, zed::DownloadedFileType::Uncompressed)
+                .map_err(|e| format!("re-download after checksum mismatch failed: {e}"))?;
+
+            let bytes = fs::read(&binary_path)
+                .map_err(|e| format!("failed to read {binary_path} after re-download: {e}"))?;
+            let retry_sha = sha256_hex(&bytes);
+
+            if !retry_sha.eq_ignore_ascii_case(&expected_sha) {
+                let _ = fs::remove_file(&binary_path);
+                return Err(format!(
+                    "checksum mismatch for downloaded tusk-php {version} ({platform_arch}): \
+                     expected {expected_sha}, got {retry_sha}"
+                )
+                .into());
+            }
+        }
+
+        zed::make_file_executable(&binary_path)?;
         self.cached_binary_path = Some(binary_path.clone());
         Ok(binary_path)
     }
@@ -313,11 +481,12 @@ impl zed::Extension for PhpLspExtension {
             None => (None, None),
         };
 
+        // Pass configured_path into the resolver so that PATH lookup wins over
+        // a client-local absolute path that may not exist on an SSH remote.
+        let command = self.language_server_binary_path(id, worktree, configured_path)?;
+
         Ok(zed::Command {
-            command: match configured_path {
-                Some(path) => path,
-                None => self.language_server_binary_path(id, worktree)?,
-            },
+            command,
             args: configured_args.unwrap_or_else(|| vec!["--transport".into(), "stdio".into()]),
             env: Default::default(),
         })
