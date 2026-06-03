@@ -4,9 +4,8 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 use zed_extension_api::{
-    self as zed,
-    settings::LspSettings,
-    LanguageServerId, Result, SlashCommand, SlashCommandOutput, SlashCommandOutputSection, Worktree,
+    self as zed, settings::LspSettings, LanguageServerId, Result, SlashCommand, SlashCommandOutput,
+    SlashCommandOutputSection, Worktree,
 };
 
 const LANGUAGE_SERVER_ID: &str = "tusk-php";
@@ -104,10 +103,14 @@ impl PhpLspExtension {
     /// Core resolution logic.
     ///
     /// Precedence:
-    ///   1. Cached path (still exists on disk as a file)
-    ///   2. `worktree.which("tusk-php")` — remote/local PATH
-    ///   3. Configured `binary.path` — resolved relative to worktree root when
+    ///   1. `worktree.which("tusk-php")` — authoritative, remote-safe PATH
+    ///      lookup on the worktree's host (SSH-aware). Always checked first so
+    ///      a stale client-local cache is never forwarded to a different host.
+    ///   2. Configured `binary.path` — resolved relative to worktree root when
     ///      not absolute; validated with `fs::metadata`; skipped if missing.
+    ///      Result is NOT cached (would cause cross-worktree leakage).
+    ///   3. Cached downloaded binary — a path this extension previously
+    ///      downloaded into its own work dir; validated with `fs::metadata`.
     ///   4. Download the pinned release, verify SHA-256, exec.
     ///   5. Actionable error.
     fn language_server_binary_path(
@@ -116,21 +119,16 @@ impl PhpLspExtension {
         worktree: &Worktree,
         configured_path: Option<String>,
     ) -> Result<String> {
-        // 1. Cached path.
-        if let Some(path) = &self.cached_binary_path {
-            if fs::metadata(path).map_or(false, |m| m.is_file()) {
-                return Ok(path.clone());
-            }
-        }
-
-        // 2. Remote/local PATH lookup — wins over any configured path so that
-        //    a client-local absolute path is NOT forwarded to an SSH remote.
+        // 1. Remote/local PATH lookup — authoritative and remote-safe. Runs
+        //    before any locally-statted path so a client-local binary is never
+        //    forwarded to an SSH remote worktree on a different host.
         if let Some(path) = worktree.which("tusk-php") {
-            self.cached_binary_path = Some(path.clone());
             return Ok(path);
         }
 
-        // 3. Configured binary.path — validate existence before trusting it.
+        // 2. Configured binary.path — validate existence before trusting it.
+        //    Not cached: caching here would leak a client-local absolute path
+        //    to a subsequent SSH-remote worktree in the same session.
         let configured_path_missing = if let Some(raw) = configured_path {
             let resolved: PathBuf = {
                 let p = PathBuf::from(&raw);
@@ -142,7 +140,6 @@ impl PhpLspExtension {
             };
             if fs::metadata(&resolved).map_or(false, |m| m.is_file()) {
                 let s = resolved.to_string_lossy().into_owned();
-                self.cached_binary_path = Some(s.clone());
                 return Ok(s);
             }
             // Configured but not found on this host — fall through, remember the fact.
@@ -150,6 +147,14 @@ impl PhpLspExtension {
         } else {
             false
         };
+
+        // 3. Cached downloaded binary — only ever holds a path this extension
+        //    downloaded into its own work dir (never a client-local path).
+        if let Some(path) = &self.cached_binary_path {
+            if fs::metadata(path).map_or(false, |m| m.is_file()) {
+                return Ok(path.clone());
+            }
+        }
 
         // 4. Download pinned release.
         let (platform, arch) = zed::current_platform();
@@ -163,14 +168,17 @@ impl PhpLspExtension {
             zed::Architecture::X8664 => "amd64",
             _ => return Err("Unsupported arch".into()),
         };
-        let ext = if platform == zed::Os::Windows { ".exe" } else { "" };
+        let ext = if platform == zed::Os::Windows {
+            ".exe"
+        } else {
+            ""
+        };
 
         let version = pinned_version();
         let platform_arch = format!("{platform_name}-{arch_name}");
 
-        let expected_sha = pinned_sha(&platform_arch).ok_or_else(|| {
-            format!("no pinned checksum for {platform_arch} in tusk-lsp.toml")
-        })?;
+        let expected_sha = pinned_sha(&platform_arch)
+            .ok_or_else(|| format!("no pinned checksum for {platform_arch} in tusk-lsp.toml"))?;
 
         let binary_path = format!("tusk-php-{version}/tusk-php{ext}");
         let url = format!(
@@ -180,8 +188,8 @@ impl PhpLspExtension {
         // Download if the file is not on disk yet.
         if !fs::metadata(&binary_path).map_or(false, |m| m.is_file()) {
             let _ = fs::create_dir_all(format!("tusk-php-{version}"));
-            zed::download_file(&url, &binary_path, zed::DownloadedFileType::Uncompressed)
-                .map_err(|e| {
+            zed::download_file(&url, &binary_path, zed::DownloadedFileType::Uncompressed).map_err(
+                |e| {
                     if configured_path_missing {
                         format!(
                             "tusk-php language server not found: not on PATH, configured \
@@ -196,14 +204,15 @@ impl PhpLspExtension {
                              access to GitHub releases."
                         )
                     }
-                })?;
+                },
+            )?;
         }
 
         // Verify SHA-256 (always — even for a pre-existing cached file).
         // If pre-existing file mismatches, re-download once and re-verify.
         let actual_sha = {
-            let bytes = fs::read(&binary_path)
-                .map_err(|e| format!("failed to read {binary_path}: {e}"))?;
+            let bytes =
+                fs::read(&binary_path).map_err(|e| format!("failed to read {binary_path}: {e}"))?;
             sha256_hex(&bytes)
         };
 
@@ -251,7 +260,10 @@ impl PhpLspExtension {
         Ok(path)
     }
 
-    fn worktree_relative_path(worktree: &Worktree, path: &str) -> core::result::Result<PathBuf, String> {
+    fn worktree_relative_path(
+        worktree: &Worktree,
+        path: &str,
+    ) -> core::result::Result<PathBuf, String> {
         let root = PathBuf::from(worktree.root_path());
         let candidate = PathBuf::from(path);
         let relative = if candidate.is_absolute() {
@@ -342,12 +354,14 @@ impl PhpLspExtension {
         }
     }
 
-    fn read_project_psr4(worktree: &Worktree) -> core::result::Result<Vec<(String, PathBuf)>, String> {
+    fn read_project_psr4(
+        worktree: &Worktree,
+    ) -> core::result::Result<Vec<(String, PathBuf)>, String> {
         let composer = worktree
             .read_text_file("composer.json")
             .map_err(|err| format!("failed to read composer.json: {err}"))?;
-        let value: zed::serde_json::Value =
-            zed::serde_json::from_str(&composer).map_err(|err| format!("invalid composer.json: {err}"))?;
+        let value: zed::serde_json::Value = zed::serde_json::from_str(&composer)
+            .map_err(|err| format!("invalid composer.json: {err}"))?;
 
         let mut mappings = Vec::new();
         for key in ["autoload", "autoload-dev"] {
@@ -363,12 +377,16 @@ impl PhpLspExtension {
                 let namespace = namespace.trim_end_matches('\\').to_string();
                 match paths {
                     zed::serde_json::Value::String(path) => {
-                        mappings.push((namespace.clone(), Self::normalize_path(PathBuf::from(path))));
+                        mappings
+                            .push((namespace.clone(), Self::normalize_path(PathBuf::from(path))));
                     }
                     zed::serde_json::Value::Array(entries) => {
                         for entry in entries {
                             if let Some(path) = entry.as_str() {
-                                mappings.push((namespace.clone(), Self::normalize_path(PathBuf::from(path))));
+                                mappings.push((
+                                    namespace.clone(),
+                                    Self::normalize_path(PathBuf::from(path)),
+                                ));
                             }
                         }
                     }
@@ -439,8 +457,12 @@ impl PhpLspExtension {
         let source = worktree
             .read_text_file(relative_path.to_string_lossy().as_ref())
             .map_err(|err| format!("failed to read {}: {err}", relative_path.display()))?;
-        let symbol = Self::declared_symbol(&source)
-            .ok_or_else(|| format!("no namespace or primary type found in {}", relative_path.display()))?;
+        let symbol = Self::declared_symbol(&source).ok_or_else(|| {
+            format!(
+                "no namespace or primary type found in {}",
+                relative_path.display()
+            )
+        })?;
 
         Ok(Self::slash_output(
             format!("Namespace: {}", relative_path.display()),
