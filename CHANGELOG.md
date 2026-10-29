@@ -18,6 +18,8 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
+- The language server now starts for **PHP** files again; it had been attached to
+  `composer.json` only.
 - `lsp.tusk-php.binary.path` is now used whenever that file exists on the machine the
   project is on, instead of being silently ignored in favour of the downloaded release
   binary. Over **Remote SSH**, a path that only exists locally is skipped and the
