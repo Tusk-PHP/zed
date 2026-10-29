@@ -18,6 +18,8 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
+- The extension ID is now `tusk-php-lsp`, as Zed requires for extensions that only provide
+  a language server. Your `lsp.tusk-php` settings keep working unchanged.
 - **Removed** the `/tusk-copy-namespace` and `/tusk-namespace-for-path` slash commands,
   which Zed no longer accepts in published extensions. Copy and move namespace come
   back as code actions with Tusk PHP language server 0.9.0.

@@ -23,8 +23,8 @@ pointing at this directory.
 
 ## Releases
 
-Registered with [`zed-industries/extensions`](https://github.com/zed-industries/extensions).
-Each release pins a known-good `Tusk-PHP/lsp` version via `tusk-lsp.toml`.
+Published through [`zed-industries/extensions`](https://github.com/zed-industries/extensions)
+as `tusk-php-lsp` (not listed there yet). Each release pins a known-good `Tusk-PHP/lsp` version via `tusk-lsp.toml`.
 
 ## Changelog
 
