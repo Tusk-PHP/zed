@@ -103,12 +103,16 @@ impl PhpLspExtension {
     /// Core resolution logic.
     ///
     /// Precedence:
-    ///   1. `worktree.which("tusk-php")` — authoritative, remote-safe PATH
-    ///      lookup on the worktree's host (SSH-aware). Always checked first so
-    ///      a stale client-local cache is never forwarded to a different host.
-    ///   2. Configured `binary.path` — resolved relative to worktree root when
-    ///      not absolute; validated with `fs::metadata`; skipped if missing.
-    ///      Result is NOT cached (would cause cross-worktree leakage).
+    ///   1. Configured `binary.path` — validated with `worktree.which`, which
+    ///      runs on the worktree's host (SSH-aware) and resolves relative paths
+    ///      against the worktree root. `fs::metadata` can't be used here: the
+    ///      WASM sandbox only sees this extension's work dir. Skipped if it
+    ///      doesn't exist on that host, so a user-level path to a local build
+    ///      doesn't break SSH remotes. Result is NOT cached (would cause
+    ///      cross-worktree leakage).
+    ///   2. `worktree.which("tusk-php")` — authoritative, remote-safe PATH
+    ///      lookup on the worktree's host (SSH-aware). Checked before the cache
+    ///      so a stale client-local path is never forwarded to a different host.
     ///   3. Cached downloaded binary — a path this extension previously
     ///      downloaded into its own work dir; validated with `fs::metadata`.
     ///   4. Download the pinned release, verify SHA-256, exec.
@@ -119,34 +123,24 @@ impl PhpLspExtension {
         worktree: &Worktree,
         configured_path: Option<String>,
     ) -> Result<String> {
-        // 1. Remote/local PATH lookup — authoritative and remote-safe. Runs
-        //    before any locally-statted path so a client-local binary is never
-        //    forwarded to an SSH remote worktree on a different host.
+        // 1. Configured binary.path — wins whenever it exists on this host.
+        //    Not cached: caching here would leak a client-local absolute path
+        //    to a subsequent SSH-remote worktree in the same session.
+        let configured_path_missing = match configured_path {
+            Some(raw) => match worktree.which(&raw) {
+                Some(path) => return Ok(path),
+                // Configured but not found on this host — fall through, remember the fact.
+                None => true,
+            },
+            None => false,
+        };
+
+        // 2. Remote/local PATH lookup — authoritative and remote-safe. Runs
+        //    before the cache so a client-local binary is never forwarded to
+        //    an SSH remote worktree on a different host.
         if let Some(path) = worktree.which("tusk-php") {
             return Ok(path);
         }
-
-        // 2. Configured binary.path — validate existence before trusting it.
-        //    Not cached: caching here would leak a client-local absolute path
-        //    to a subsequent SSH-remote worktree in the same session.
-        let configured_path_missing = if let Some(raw) = configured_path {
-            let resolved: PathBuf = {
-                let p = PathBuf::from(&raw);
-                if p.is_absolute() {
-                    p
-                } else {
-                    PathBuf::from(worktree.root_path()).join(p)
-                }
-            };
-            if fs::metadata(&resolved).map_or(false, |m| m.is_file()) {
-                let s = resolved.to_string_lossy().into_owned();
-                return Ok(s);
-            }
-            // Configured but not found on this host — fall through, remember the fact.
-            true
-        } else {
-            false
-        };
 
         // 3. Cached downloaded binary — only ever holds a path this extension
         //    downloaded into its own work dir (never a client-local path).
@@ -192,16 +186,17 @@ impl PhpLspExtension {
                 |e| {
                     if configured_path_missing {
                         format!(
-                            "tusk-php language server not found: not on PATH, configured \
-                             binary.path does not exist on the target host, and the release \
-                             download failed ({e}). Install tusk-php on the remote PATH or \
-                             unset/correct lsp.tusk-php.binary.path."
+                            "tusk-php language server not found: configured binary.path does \
+                             not exist on the target host, tusk-php is not on PATH, and the \
+                             release download failed ({e}). Install tusk-php on the remote PATH \
+                             or unset/correct lsp.tusk-php.binary.path."
                         )
                     } else {
                         format!(
                             "tusk-php language server not found: not on PATH and the release \
-                             download failed ({e}). Install tusk-php manually or ensure network \
-                             access to GitHub releases."
+                             download failed ({e}). Install tusk-php on PATH, set \
+                             lsp.tusk-php.binary.path, or ensure network access to GitHub \
+                             releases."
                         )
                     }
                 },

@@ -18,6 +18,13 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
+- `lsp.tusk-php.binary.path` is now used whenever that file exists on the machine the
+  project is on, instead of being silently ignored in favour of the downloaded release
+  binary. Over **Remote SSH**, a path that only exists locally is skipped and the
+  extension falls back to `tusk-php` on the remote `PATH` or the downloaded release.
+- Starting the server over **Remote SSH** no longer tries to run a binary from your local
+  machine on the remote host.
+
 ## [0.9.0]
 
 Bundles **Tusk PHP language server 0.8.0** —
