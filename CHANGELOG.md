@@ -18,6 +18,9 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
+- **Removed** the `/tusk-copy-namespace` and `/tusk-namespace-for-path` slash commands,
+  which Zed no longer accepts in published extensions. Copy and move namespace come
+  back as code actions with Tusk PHP language server 0.9.0.
 - The language server now starts for **PHP** files again; it had been attached to
   `composer.json` only.
 - `lsp.tusk-php.binary.path` is now used whenever that file exists on the machine the
