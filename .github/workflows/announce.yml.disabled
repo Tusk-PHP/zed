@@ -1,0 +1,33 @@
+# Disabled: Telegram announcements only run from Tusk-PHP/lsp for now. To enable,
+# uncomment and rename this file to announce.yml (GitHub only loads .yml/.yaml).
+
+# name: Announce
+#
+# # Zed publishes an extension version when its PR to zed-industries/extensions is
+# # merged, which happens outside this repository. Run this by hand once the new
+# # version shows up in Zed's extension registry.
+#
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       tag:
+#         description: Release tag to announce (e.g. 0.9.0)
+#         required: true
+#         type: string
+#
+# jobs:
+#   announce:
+#     if: ${{ !contains(inputs.tag, '-') }}
+#     permissions:
+#       contents: read
+#     uses: Pepebits/release-announce/.github/workflows/announce.yml@v1
+#     with:
+#       tag: ${{ inputs.tag }}
+#       project_name: Tusk PHP for Zed
+#       notes_source: changelog
+#       buttons: >-
+#         [{"text": "📝 Notes", "url": "{repo_url}/blob/{tag}/CHANGELOG.md"},
+#          {"text": "🧩 Zed", "url": "https://zed.dev/extensions?query=tusk"}]
+#     secrets:
+#       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+#       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
