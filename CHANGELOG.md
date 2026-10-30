@@ -18,6 +18,9 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
+Bundles **Tusk PHP language server 0.9.0** —
+[what's new in the server](https://github.com/Tusk-PHP/lsp/releases/tag/0.9.0).
+
 - The extension ID is now `tusk-php-lsp`, as Zed requires for extensions that only provide
   a language server. Your `lsp.tusk-php` settings keep working unchanged.
 - **Removed** the `/tusk-copy-namespace` and `/tusk-namespace-for-path` slash commands,
