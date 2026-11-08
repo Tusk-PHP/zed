@@ -18,6 +18,8 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
+- **Blade views**: with the Blade extension installed, `.blade.php` files are sent to the language server, which checks the PHP in them. Needs language server 0.12.0 or later.
+
 ## [0.11.1] - 2026-11-02
 
 First release through Zed's extension registry.

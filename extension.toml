@@ -7,8 +7,9 @@ repository = "https://github.com/Tusk-PHP/zed"
 authors = ["Open Southeners"]
 
 [language_servers.tusk-php]
-languages = ["PHP", "JSON"]
+languages = ["PHP", "Blade", "JSON"]
 
 [language_servers.tusk-php.language_ids]
 PHP = "php"
+Blade = "blade"
 JSON = "json"
