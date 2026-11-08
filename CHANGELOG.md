@@ -18,7 +18,12 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
-- **Blade views**: with the Blade extension installed, `.blade.php` files are sent to the language server, which checks the PHP in them. Needs language server 0.12.0 or later.
+## [0.12.0] - 2026-11-09
+
+Bundles **Tusk PHP language server 0.12.0** —
+[what's new in the server](https://github.com/Tusk-PHP/lsp/releases/tag/0.12.0).
+
+- **Blade views**: with the Blade extension installed, `.blade.php` files are sent to the language server, which checks the PHP in them.
 
 ## [0.11.1] - 2026-11-02
 
