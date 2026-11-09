@@ -18,6 +18,14 @@ This changelog is written for people installing the extension; it does not follo
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-09
+
+Bundles **Tusk PHP language server 0.13.0** —
+[what's new in the server](https://github.com/Tusk-PHP/lsp/releases/tag/0.13.0).
+
+- **Generics**: types written in PHPDoc the way PHPStan reads them (`Collection<int, User>`, `@template`, `@extends`, `class-string<T>`, closures, conditional return types, `@phpstan-assert`) now carry through hover, completion and diagnostics, so Laravel's collections and query builders, Symfony's messenger and PHPUnit assertions are typed.
+- **Diagnostics are 3–4× faster** on large files, and report fewer false warnings.
+
 ## [0.12.0] - 2026-11-09
 
 Bundles **Tusk PHP language server 0.12.0** —
